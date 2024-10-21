@@ -2,7 +2,7 @@ import enum
 import random
 from pathlib import Path
 import tkinter as tk
-from tkinter import ttk
+# from tkinter import ttk
 from tkinter import simpledialog
 from PIL import Image, ImageTk
 
