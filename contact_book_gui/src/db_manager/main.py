@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from phonenumbers import is_valid_number, is_possible_number, parse as phone_no_parse
 
 from ._table_managers import Base, Contact
-from ._formatting import print_err_to_stderr
+from ._formatting import print_err_to_stderr, log_info_to_stdout
 
 
 EMAIL_REGEX = re.compile(r'^(([^<>()[\]\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*|\".+\")@(([a-z\d-]+\.)+[a-z]{2,})|others)$')
@@ -29,12 +29,23 @@ IS_POSSIBLE_PHONE_NUMBER_RE = re.compile(r'^[0-9]{4,12}$')
 
 @print_err_to_stderr
 def validator(values: ContactEntry) -> ContactEntry | NoReturn:
-  email = values.get('email', None)
-  if email is not None and not EMAIL_REGEX.match(email):
-    raise ValueError("Not a valid email address.")
+  if not values.get('name', ''):
+    raise ValueError('Name cannot be empty.')
 
-  phone_no = values.get("phone_no", None)
-  if phone_no is None:
+  email = values.get('email', '').strip()
+  phone_no = values.get('phone_no', '').strip()
+  address = values.get('address', '').strip()
+
+  if not (phone_no or email or address):
+    raise ValueError(
+      "Either phone number, email or address is required to add a new entry."
+    )
+
+  if email and not EMAIL_REGEX.match(email):
+    raise ValueError("The given email address is not valid.")
+
+  phone_no = values.get("phone_no", '').strip()
+  if not phone_no:
     return
 
   try:
@@ -48,25 +59,21 @@ def validator(values: ContactEntry) -> ContactEntry | NoReturn:
       raise ValueError(phone_no)
 
   except Exception as e:
-    raise ValueError(f"Not a valid phone number.") from e
+    raise ValueError(f"The givem phone number is not valid.") from e
 
   return values
 
 
 @print_err_to_stderr
+@log_info_to_stdout
 def add(values: ContactEntry) -> None:
   validator(values)
   DB_SESSION.add(Contact(**values))
-  # DB_SESSION.commit()
 
 
 @print_err_to_stderr
+@log_info_to_stdout
 def search(query: str | None = None) -> list[Contact]:
-  # return DB_SESSION.execute(text(
-  #     "SELECT * FROM contacts WHERE name LIKE :name OR phone_no LIKE :phone_no OR email LIKE :email OR address LIKE :address",
-  #   ), dict.fromkeys(('name', 'phone_no', 'email', 'address'), f"%{query}%"),
-  # ).all()
-
   sql_query = DB_SESSION.query(Contact)
 
   if query:
@@ -81,27 +88,25 @@ def search(query: str | None = None) -> list[Contact]:
 
 
 @print_err_to_stderr
+@log_info_to_stdout
 def update(query: ContactEntry, values: ContactEntry) -> None:
-  if isinstance(phone_nos, int):
-    phone_nos = (phone_nos,)
-
   DB_SESSION.query(Contact).filter_by(**query).update(values)
-  # DB_SESSION.commit()
 
 
 @print_err_to_stderr
+@log_info_to_stdout
 def delete(query: ContactEntry) -> None:
-  if isinstance(phone_nos, int):
-    phone_nos = (phone_nos,)
-
   DB_SESSION.query(Contact).filter_by(**query).delete()
-  # DB_SESSION.commit()
+
 
 @print_err_to_stderr
+@log_info_to_stdout
 def save_changes():
   DB_SESSION.commit()
 
 
+@print_err_to_stderr
+@log_info_to_stdout
 def init_db_session():
   global DB_SESSION
 
@@ -109,9 +114,4 @@ def init_db_session():
   Base.metadata.create_all(bind=engine)
 
   DB_SESSION = sessionmaker(bind=engine)()
-  # print(*(vars(i) for i in search(query='rma')))
   return DB_SESSION
-
-
-# if __name__ == "__main__":
-#   init_db_session()

@@ -2,13 +2,12 @@ import sys
 from functools import wraps
 import typing as t
 
-from PySide6.QtCore import QObject
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
   QApplication, QMainWindow, QWidget, QLineEdit, QPushButton, QHeaderView, QVBoxLayout,
   QHBoxLayout, QTableWidget, QTableWidgetItem, QMessageBox, QAbstractItemView,
+  QLabel, QDialog
 )
-
-from PySide6.QtGui import QValidator
 
 from .db_manager import (
   ContactEntry, init_db_session, add, search, update, delete, save_changes, validator,
@@ -22,19 +21,89 @@ class BigLineEdit(QLineEdit):
     self.setMinimumHeight(25)
 
 
-class StrValidator(QValidator):
-  def __init__(
-    self, callback: t.Callable[[str, int], bool | t.NoReturn], parent: QObject | None = ...
-  ) -> None:
+class AddContactDialog(QDialog):
+  def __init__(self, parent=None):
     super().__init__(parent)
-    self.callback = callback
 
-  def validate(self, string: str, index: int) -> object:
-    if self.callback(string, index):
-      valid = QValidator.State.Acceptable
-    else:
-      valid = QValidator.State.Invalid
-    return valid, string, index
+    self.setWindowTitle("Add New Contact")
+    self.setGeometry(100, 100, 300, 200)
+
+    layout = QVBoxLayout()
+
+    # Name field
+    self.name_input = BigLineEdit()
+    self.name_input.setPlaceholderText('Name')
+    self.name_input.textChanged.connect(self.clear_err_msg)
+
+    # Phone field
+    self.phone_input = BigLineEdit()
+    self.phone_input.setPlaceholderText('Phone')
+    self.phone_input.textChanged.connect(self.clear_err_msg)
+
+    # Email field
+    self.email_input = BigLineEdit()
+    self.email_input.setPlaceholderText('Email')
+    self.email_input.textChanged.connect(self.clear_err_msg)
+
+    # Address field
+    self.address_input = BigLineEdit()
+    self.address_input.setPlaceholderText('Address')
+    self.address_input.textChanged.connect(self.clear_err_msg)
+
+    # Error msg field
+    self.err_text_field = QLabel('')
+
+    # Buttons
+    self.save_button = QPushButton("Save")
+    self.save_button.clicked.connect(self.add_contact)
+    self.cancel_button = QPushButton("Cancel")
+    self.cancel_button.clicked.connect(self.reject)
+
+    # Layout for input fields and buttons
+    form_layout = QVBoxLayout()
+    form_layout.addWidget(self.name_input)
+    form_layout.addWidget(self.phone_input)
+    form_layout.addWidget(self.email_input)
+    form_layout.addWidget(self.address_input)
+    form_layout.addWidget(self.err_text_field)
+
+    button_layout = QHBoxLayout()
+    button_layout.addWidget(self.save_button)
+    button_layout.addWidget(self.cancel_button)
+
+    layout.addLayout(form_layout)
+    layout.addLayout(button_layout)
+
+    self.setLayout(layout)
+
+  def set_err_msg(self, msg: str) -> None:
+    self.err_text_field.setText(msg)
+
+  def clear_err_msg(self):
+    if self.err_text_field.text():
+      self.set_err_msg("")
+
+  def add_contact(self) -> None:
+    name = self.name_input.text()
+    phone_no = self.phone_input.text()
+    email = self.email_input.text()
+    address = self.address_input.text()
+
+    try:
+      validator({'name': name, 'phone_no': phone_no, 'email': email, 'address': address})
+
+    except Exception as e:
+      self.set_err_msg(str(e))
+      return
+
+    self.parent().add_contact(name, phone_no, email, address, True)
+
+    name = self.name_input.clear()
+    phone_no = self.phone_input.clear()
+    email = self.email_input.clear()
+    address = self.address_input.clear()
+
+    self.hide()
 
 
 class ContactBook(QMainWindow):
@@ -63,6 +132,7 @@ class ContactBook(QMainWindow):
     # Search input
     self.search_input = QLineEdit()
     self.search_input.setPlaceholderText('Search')
+    self.search_input.returnPressed.connect(self.search_contact)
     search_btn = QPushButton("Search")
     search_btn.clicked.connect(self.search_contact)
 
@@ -86,64 +156,16 @@ class ContactBook(QMainWindow):
     self._layout.addLayout(buttons_layout)
     self._layout.addWidget(self.contact_table)
 
-    # Hidden input fields for adding/updating contacts
-    self.name_input = BigLineEdit()
-    self.name_input.setPlaceholderText('Name')
-
-    self.phone_input = BigLineEdit()
-    self.phone_input.setPlaceholderText('Phone')
-
-    self.email_input = BigLineEdit()
-    self.email_input.setPlaceholderText('Email')
-
-    self.address_input = BigLineEdit()
-    self.address_input.setPlaceholderText('Address')
-
-    save_btn = QPushButton("Save")
-    save_btn.clicked.connect(self.add_contact_from_input_entries)
-
-    cancel_btn = QPushButton("Cancel")
-    cancel_btn.clicked.connect(self.hide_add_contact_fields)
-
-    add_contact_dialog_buttons_layout = QHBoxLayout()
-    add_contact_dialog_buttons_layout.addWidget(save_btn)
-    add_contact_dialog_buttons_layout.addWidget(cancel_btn)
-
-    name_layout = QHBoxLayout()
-    name_layout.addWidget(self.name_input)
-
-    phone_no_layout = QHBoxLayout()
-    phone_no_layout.addWidget(self.phone_input)
-
-    email_layout = QHBoxLayout()
-    email_layout.addWidget(self.email_input)
-
-    address_layout = QHBoxLayout()
-    address_layout.addWidget(self.address_input)
-
-    self.input_fields = QWidget()
-
-    LR_PADDING = 150
-    UD_PADDING = 10
-
-    input_layout = QVBoxLayout()
-    input_layout.setContentsMargins(LR_PADDING, UD_PADDING, LR_PADDING, UD_PADDING)
-    input_layout.setSpacing(10)
-
-    input_layout.addLayout(name_layout)
-    input_layout.addLayout(phone_no_layout)
-    input_layout.addLayout(email_layout)
-    input_layout.addLayout(address_layout)
-    input_layout.addLayout(add_contact_dialog_buttons_layout)
-
-    self.input_fields.setLayout(input_layout)
-    self._layout.addWidget(self.input_fields)
+    self.input_fields = AddContactDialog(self)
     self.input_fields.hide()
 
-    self.recent_changes: dict[int, ContactEntry] = {}
-    self.contact_table.itemChanged.connect(self.update_local_changes_cache)
+    self.local_changes: dict[int, ContactEntry] = {}
+    self.local_deletion_changes: set[int] = set()
     self.db_session = init_db_session()
     self.load_db()
+    self.contact_table.itemChanged.connect(self.update_local_changes_cache)
+
+    self.showing_search_results: bool = False
 
   def display_err_as_critical[F](func: F) -> F:
     @wraps(func)
@@ -156,6 +178,7 @@ class ContactBook(QMainWindow):
 
     return wrapper
 
+  @display_err_as_critical
   def delete_selected_contacts(self) -> None:
     selected_items = self.contact_table.selectedItems()
     if not selected_items:
@@ -165,14 +188,20 @@ class ContactBook(QMainWindow):
     rows_to_delete = {item.row() for item in selected_items}
 
     for row in sorted(rows_to_delete, reverse=True):
+      self.add_local_deletion_changes_cache(row)
       self.contact_table.removeRow(row)
-      if row in self.recent_changes:
-        delete()
 
     QMessageBox.information(self, "Info", "Selected contacts have been deleted.")
 
+  @display_err_as_critical
   def update_local_changes_cache(self, item: QTableWidgetItem) -> None:
-    self.recent_changes[item.row()][DB_COLUMNS[item.column()]] = item.text()
+    row = self.contact_table.item(item.row(), 0).data(Qt.UserRole)
+    self.local_changes.setdefault(row, {})[DB_COLUMNS[item.column()]] = item.text()
+
+  @display_err_as_critical
+  def add_local_deletion_changes_cache(self, row_id: int) -> None:
+    row = self.contact_table.item(row_id, 0).data(Qt.UserRole)
+    self.local_deletion_changes.add(row)
 
   def show_add_contact_fields(self):
     self.input_fields.show()
@@ -182,49 +211,42 @@ class ContactBook(QMainWindow):
 
   @display_err_as_critical
   def add_contact(
-    self, name: str, phone_no: str | None = None, email: str | None = None, address: str | None = None
+    self,
+    name: str,
+    phone_no: str = '',
+    email: str = '',
+    address: str = '',
+    update_db: bool = False,
+    _id: int = -1,
   ) -> None:
-    validator({'name': name, 'phone_no': phone_no, 'email': email, 'address': address})
-
     row_position = self.contact_table.rowCount()
     self.contact_table.insertRow(row_position)
-    self.contact_table.setItem(row_position, 0, QTableWidgetItem(name))
+
+    if update_db:
+      _id = add({"name": name, "phone_no": phone_no, "email": email, "address": address})
+
+    name_item = QTableWidgetItem(name)
+    name_item.setData(Qt.UserRole, _id)
+
+    self.contact_table.setItem(row_position, 0, name_item)
     self.contact_table.setItem(row_position, 1, QTableWidgetItem(phone_no))
     self.contact_table.setItem(row_position, 2, QTableWidgetItem(email))
     self.contact_table.setItem(row_position, 3, QTableWidgetItem(address))
-
-    add({"name": name, "phone_no": phone_no, "email": email, "address": address})
-
-  def add_contact_from_input_entries(self):
-    name = self.name_input.text()
-    phone = self.phone_input.text()
-    email = self.email_input.text()
-    address = self.address_input.text()
-
-    if not name:
-      QMessageBox.warning(self, "Error", "Name cannot be empty.")
-      return
-
-    if not (phone or email or address):
-      QMessageBox.warning(
-        self, "Error", "Either phone number, email or address is required to add a new entry."
-      )
-      return
-
-    self.add_contact(name, phone, email, address)
-
-    self.name_input.clear()
-    self.phone_input.clear()
-    self.email_input.clear()
-    self.address_input.clear()
-    self.hide_add_contact_fields()
 
   def search_contact(self):
     query = self.search_input.text().lower()
     found = False
 
     if not query:
+      if self.showing_search_results:
+        for rowIdx in range(self.contact_table.rowCount()):
+          if self.contact_table.isRowHidden(rowIdx):
+            self.contact_table.showRow(rowIdx)
+
+        self.showing_search_results = False
       return
+
+    self.showing_search_results = True
 
     for row in range(self.contact_table.rowCount()):
       match = False
@@ -234,41 +256,38 @@ class ContactBook(QMainWindow):
           match = True
           break
 
-      if match:
-        self.contact_table.selectRow(row)
+      if not match:
+        self.contact_table.hideRow(row)
         found = True
-        break
 
     if not found:
       QMessageBox.information(self, "Not Found", "No contact found matching the query.")
+      self.showing_search_results = False
 
-    else:
-      QMessageBox.warning(self, "Input Error", "Please enter a search query.")
-
+  @display_err_as_critical
   def load_db(self):
     for contact in search():
       self.add_contact(
-        name=contact.name, phone_no=contact.phone_no, address=contact.address, email=contact.email
+        name=contact.name,
+        phone_no=contact.phone_no,
+        address=contact.address,
+        email=contact.email,
+        _id=contact.id,
       )
 
-  # def refresh_table_contents(self):
-  #   ...
-
-  def delete_selected_contact(self):
-    current_row = self.contact_table.currentRow()
-
-    if current_row != -1:
-      self.contact_table.removeRow(current_row)
-
-    else:
-      QMessageBox.warning(self, "Delete Error", "No contact selected to delete.")
-
+  @display_err_as_critical
   def save_changes_to_db(self):
-    if self.recent_changes:
-      for contact in self.recent_changes.values():
-        update(contact['phone_no'], contact)
+    if self.local_changes:
+      for _id, contact in self.local_changes.items():
+        update({'id': _id}, contact)
 
-      self.recent_changes = {}
+      self.local_changes = {}
+
+    if self.local_deletion_changes:
+      for _id in self.local_deletion_changes:
+        delete({'id': _id})
+
+      self.local_deletion_changes = set()
 
     save_changes()
 

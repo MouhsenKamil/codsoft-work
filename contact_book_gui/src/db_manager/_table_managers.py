@@ -1,5 +1,5 @@
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy import MetaData, Column, Text, UniqueConstraint, CheckConstraint, Integer, String
+from sqlalchemy import MetaData, Column, Text, CheckConstraint, Integer, String
 
 
 metadata = MetaData()
@@ -7,8 +7,6 @@ metadata = MetaData()
 
 class Base(DeclarativeBase):
   metadata = metadata
-
-
 
 
 class Contact(Base):
@@ -25,8 +23,4 @@ class Contact(Base):
       "((phone_no IS NOT NULL) OR (email IS NOT NULL) OR (address IS NOT NULL))",
       name='phone_no_or_email_or_address_is_not_null'
     ),
-    # CheckConstraint(
-    #   r"email IS NULL OR email regexp '^(([^<>()[\]\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*|\".+\")@(([a-z\d-]+\.)+[a-z]{2,})|others)$'",
-    #   name='valid_email_regex'
-    # )
   )
