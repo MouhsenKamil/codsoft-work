@@ -1,7 +1,0 @@
-PySide6
-SQLAlchemy[asyncio]
-python-dotenv
-rich
-pyperclip
-requests
-phonenumbers
